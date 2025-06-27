@@ -285,10 +285,10 @@ jobs:
           # Adding comments (#) may be useful to easily tell the individual patches apart.
 
           # adds deviceToken to DeviceDataManager debug output
-          echo 'diff --git Loop/Managers/DeviceDataManager.swift Loop/Managers/DeviceDataManager.swift
+          echo 'diff --git Loop/Loop/Managers/DeviceDataManager.swift Loop/Loop/Managers/DeviceDataManager.swift
           index 2751f18f..9f46800c 100644
-          --- Loop/Managers/DeviceDataManager.swift
-          +++ Loop/Managers/DeviceDataManager.swift
+          --- Loop/Loop/Managers/DeviceDataManager.swift
+          +++ Loop/Loop/Managers/DeviceDataManager.swift
           @@ -1720,6 +1720,7 @@ extension DeviceDataManager: DeviceSupportDelegate {
                                    "## DeviceDataManager",
                                    "* launchDate: \(self.launchDate)",

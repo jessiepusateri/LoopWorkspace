@@ -1,0 +1,12 @@
+diff --git Loop/Managers/DeviceDataManager.swift Loop/Managers/DeviceDataManager.swift
+index 2751f18f..c8050bd4 100644
+--- Loop/Managers/DeviceDataManager.swift
++++ Loop/Managers/DeviceDataManager.swift
+@@ -1720,6 +1720,7 @@ extension DeviceDataManager: DeviceSupportDelegate {
+                         "## DeviceDataManager",
+                         "* launchDate: \(self.launchDate)",
+                         "* lastError: \(String(describing: self.lastError))",
++                        "* deviceToken: \(settingsManager.latestSettings.deviceToken ?? "N/A")",
+                         "",
+                         "cacheStore: \(String(reflecting: self.cacheStore))",
+                         "",

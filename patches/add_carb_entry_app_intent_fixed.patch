@@ -1,0 +1,480 @@
+diff --git a/AppIntents/CarbEntryAppIntent.swift b/AppIntents/CarbEntryAppIntent.swift
+new file mode 100644
+index 00000000..f651c627
+--- /dev/null
++++ b/AppIntents/CarbEntryAppIntent.swift
+@@ -0,0 +1,119 @@
++//
++//  CarbEntryAppIntent.swift
++//  Loop
++//
++//  Created by App Intent Implementation
++//  Copyright © 2024 LoopKit Authors. All rights reserved.
++//
++
++import AppIntents
++import Foundation
++import HealthKit
++import LoopKit
++
++@available(iOS 16.0, *)
++struct LogCarbsIntent: AppIntent {
++    static var title: LocalizedStringResource = "Log Carbohydrates in Loop"
++    static var description = IntentDescription("Log carbohydrate intake for insulin dosing calculations")
++    static var isDiscoverable = true
++    static var openAppWhenRun: Bool = false
++
++    @Parameter(
++        title: "Carb Amount",
++        description: "Amount of carbohydrates in grams",
++        default: 0,
++        inclusiveRange: (0, 500)
++    )
++    var carbAmount: Double
++
++    @Parameter(
++        title: "Absorption Time",
++        description: "How long the carbs will take to absorb (in hours)",
++        default: 3.0,
++        inclusiveRange: (1.0, 8.0)
++    )
++    var absorptionTime: Double?
++
++    @Parameter(
++        title: "Food Type",
++        description: "Type of food being consumed"
++    )
++    var foodType: String?
++
++    func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetView {
++        guard carbAmount > 0 else {
++            return .result(
++                dialog: "Please enter a carb amount greater than 0 grams",
++                view: CarbEntryResultView(result: .failure("Invalid amount"))
++            )
++        }
++
++        do {
++            let success = try await logCarbohydrates(
++                amount: carbAmount,
++                absorptionTime: absorptionTime ?? 3.0,
++                foodType: foodType
++            )
++
++            if success {
++                let message = formatSuccessMessage()
++                return .result(
++                    dialog: message,
++                    view: CarbEntryResultView(result: .success(carbAmount, absorptionTime ?? 3.0))
++                )
++            } else {
++                return .result(
++                    dialog: "Failed to log carbohydrates. Please try again.",
++                    view: CarbEntryResultView(result: .failure("Logging failed"))
++                )
++            }
++        } catch {
++            return .result(
++                dialog: "Error logging carbohydrates: \(error.localizedDescription)",
++                view: CarbEntryResultView(result: .failure(error.localizedDescription))
++            )
++        }
++    }
++
++    private func formatSuccessMessage() -> String {
++        var message = "Logged \(Int(carbAmount))g carbs"
++        if let foodType = foodType, !foodType.isEmpty {
++            message += " from \(foodType)"
++        }
++        if let absorption = absorptionTime, absorption != 3.0 {
++            message += " with \(String(format: "%.1f", absorption))h absorption"
++        }
++        return message
++    }
++
++    private func logCarbohydrates(amount: Double, absorptionTime: Double, foodType: String?) async throws -> Bool {
++        return await withCheckedContinuation { continuation in
++            DispatchQueue.main.async {
++                guard let appDelegate = UIApplication.shared.delegate as? AppDelegate,
++                      let loopDataManager = appDelegate.loopAppManager.loopDataManager else {
++                    continuation.resume(returning: false)
++                    return
++                }
++
++                let now = Date()
++                let absorptionTimeInterval = TimeInterval(absorptionTime * 60 * 60) // Convert to seconds
++
++                let carbEntry = NewCarbEntry(
++                    quantity: HKQuantity(unit: .gram(), doubleValue: amount),
++                    startDate: now,
++                    foodType: foodType?.isEmpty == false ? foodType : nil,
++                    absorptionTime: absorptionTimeInterval
++                )
++
++                loopDataManager.addCarbEntry(carbEntry) { result in
++                    switch result {
++                    case .success:
++                        continuation.resume(returning: true)
++                    case .failure:
++                        continuation.resume(returning: false)
++                    }
++                }
++            }
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/AppIntents/CarbEntryResultView.swift b/AppIntents/CarbEntryResultView.swift
+new file mode 100644
+index 00000000..3d8a3e3c
+--- /dev/null
++++ b/AppIntents/CarbEntryResultView.swift
+@@ -0,0 +1,67 @@
++//
++//  CarbEntryResultView.swift
++//  Loop
++//
++//  Created by App Intent Implementation
++//  Copyright © 2024 LoopKit Authors. All rights reserved.
++//
++
++import AppIntents
++import SwiftUI
++
++@available(iOS 16.0, *)
++struct CarbEntryResultView: View {
++    let result: CarbEntryResult
++
++    var body: some View {
++        VStack(spacing: 16) {
++            switch result {
++            case .success(let amount, let absorptionTime):
++                Image(systemName: "checkmark.circle.fill")
++                    .font(.system(size: 50))
++                    .foregroundColor(.green)
++
++                Text("Carbs Logged Successfully")
++                    .font(.headline)
++
++                VStack(alignment: .leading, spacing: 8) {
++                    HStack {
++                        Text("Amount:")
++                            .fontWeight(.medium)
++                        Spacer()
++                        Text("\(Int(amount))g")
++                    }
++
++                    HStack {
++                        Text("Absorption Time:")
++                            .fontWeight(.medium)
++                        Spacer()
++                        Text(String(format: "%.1f hours", absorptionTime))
++                    }
++                }
++                .padding()
++                .background(Color(.secondarySystemBackground))
++                .cornerRadius(8)
++
++            case .failure(let error):
++                Image(systemName: "exclamationmark.triangle.fill")
++                    .font(.system(size: 50))
++                    .foregroundColor(.orange)
++
++                Text("Failed to Log Carbs")
++                    .font(.headline)
++
++                Text(error)
++                    .font(.body)
++                    .foregroundColor(.secondary)
++                    .multilineTextAlignment(.center)
++            }
++        }
++        .padding()
++    }
++}
++
++enum CarbEntryResult {
++    case success(Double, Double) // amount, absorption time
++    case failure(String)
++}
+\ No newline at end of file
+diff --git a/AppIntents/LoopAppShortcuts.swift b/AppIntents/LoopAppShortcuts.swift
+new file mode 100644
+index 00000000..db193e3f
+--- /dev/null
++++ b/AppIntents/LoopAppShortcuts.swift
+@@ -0,0 +1,28 @@
++//
++//  LoopAppShortcuts.swift
++//  Loop
++//
++//  Created by App Intent Implementation
++//  Copyright © 2024 LoopKit Authors. All rights reserved.
++//
++
++import AppIntents
++
++@available(iOS 16.0, *)
++struct LoopAppShortcuts: AppShortcutsProvider {
++    static var appShortcuts: [AppShortcut] {
++        AppShortcut(
++            intent: LogCarbsIntent(),
++            phrases: [
++                "Log carbs in Loop",
++                "Add carbohydrates to Loop",
++                "Enter carbs in Loop",
++                "Log \(.applicationName) carbohydrates",
++                "Add \(\.$carbAmount) grams of carbs to Loop",
++                "I ate \(\.$carbAmount) grams of carbs"
++            ],
++            shortTitle: "Log Carbs",
++            systemImageName: "fork.knife"
++        )
++    }
++}
+\ No newline at end of file
+diff --git a/Loop/AppDelegate.swift b/Loop/AppDelegate.swift
+index ebb05d5c..065f8146 100644
+--- a/Loop/AppDelegate.swift
++++ b/Loop/AppDelegate.swift
+@@ -8,12 +8,18 @@
+ 
+ import UIKit
+ import LoopKit
++import AppIntents
+ 
+ final class AppDelegate: UIResponder, UIApplicationDelegate, WindowProvider {
+     var window: UIWindow?
+ 
+-    private let loopAppManager = LoopAppManager()
++    private let _loopAppManager = LoopAppManager()
+     private let log = DiagnosticLog(category: "AppDelegate")
++    
++    // Public access for App Intents
++    var loopAppManager: LoopAppManager {
++        return _loopAppManager
++    }
+ 
+     // MARK: - UIApplicationDelegate - Initialization
+ 
+@@ -24,9 +30,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, WindowProvider {
+ 
+         log.default("lastPathComponent = %{public}@", String(describing: Bundle.main.appStoreReceiptURL?.lastPathComponent))
+ 
+-        loopAppManager.initialize(windowProvider: self, launchOptions: launchOptions)
+-        loopAppManager.launch()
+-        return loopAppManager.isLaunchComplete
++        __loopAppManager.initialize(windowProvider: self, launchOptions: launchOptions)
++        __loopAppManager.launch()
++        return __loopAppManager.isLaunchComplete
+     }
+ 
+     // MARK: - UIApplicationDelegate - Life Cycle
+@@ -34,7 +40,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, WindowProvider {
+     func applicationDidBecomeActive(_ application: UIApplication) {
+         log.default(#function)
+ 
+-        loopAppManager.didBecomeActive()
++        __loopAppManager.didBecomeActive()
+     }
+ 
+     func applicationWillResignActive(_ application: UIApplication) {
+@@ -48,7 +54,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, WindowProvider {
+     func applicationWillEnterForeground(_ application: UIApplication) {
+         log.default(#function)
+         
+-        loopAppManager.askUserToConfirmLoopReset()
++        _loopAppManager.askUserToConfirmLoopReset()
+     }
+ 
+     func applicationWillTerminate(_ application: UIApplication) {
+@@ -59,8 +65,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, WindowProvider {
+ 
+     func applicationProtectedDataDidBecomeAvailable(_ application: UIApplication) {
+         DispatchQueue.main.async {
+-            if self.loopAppManager.isLaunchPending {
+-                self.loopAppManager.launch()
++            if self._loopAppManager.isLaunchPending {
++                self._loopAppManager.launch()
+             }
+         }
+     }
+@@ -70,24 +76,24 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, WindowProvider {
+     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+         log.default(#function)
+ 
+-        loopAppManager.remoteNotificationRegistrationDidFinish(.success(deviceToken))
++        _loopAppManager.remoteNotificationRegistrationDidFinish(.success(deviceToken))
+     }
+ 
+     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+         log.error("%{public}@ with error: %{public}@", #function, String(describing: error))
+-        loopAppManager.remoteNotificationRegistrationDidFinish(.failure(error))
++        _loopAppManager.remoteNotificationRegistrationDidFinish(.failure(error))
+     }
+ 
+     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+         log.default(#function)
+ 
+-        completionHandler(loopAppManager.handleRemoteNotification(userInfo as? [String: AnyObject]) ? .noData : .failed)
++        completionHandler(_loopAppManager.handleRemoteNotification(userInfo as? [String: AnyObject]) ? .noData : .failed)
+     }
+     
+     // MARK: - UIApplicationDelegate - Deeplinking
+     
+     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+-        loopAppManager.handle(url)
++        _loopAppManager.handle(url)
+     }
+ 
+     // MARK: - UIApplicationDelegate - Continuity
+@@ -95,12 +101,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate, WindowProvider {
+     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+         log.default(#function)
+ 
+-        return loopAppManager.userActivity(userActivity, restorationHandler: restorationHandler)
++        return _loopAppManager.userActivity(userActivity, restorationHandler: restorationHandler)
+     }
+ 
+     // MARK: - UIApplicationDelegate - Interface
+ 
+     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+-        return loopAppManager.supportedInterfaceOrientations
++        return _loopAppManager.supportedInterfaceOrientations
+     }
+ }
+diff --git a/Loop/Info.plist b/Loop/Info.plist
+index ddad5426..25eef3b1 100644
+--- a/Loop/Info.plist
++++ b/Loop/Info.plist
+@@ -71,9 +71,12 @@
+ 	<string>Carbohydrate meal data entered in the app and on the watch is stored in the Health database. Glucose data retrieved from the CGM is stored securely in HealthKit.</string>
+ 	<key>NSSiriUsageDescription</key>
+ 	<string>Loop uses Siri to allow you to enact presets with your voice.</string>
++	<key>NSSupportsLiveActivities</key>
++	<true/>
+ 	<key>NSUserActivityTypes</key>
+ 	<array>
+ 		<string>EnableOverridePresetIntent</string>
++		<string>LogCarbsIntent</string>
+ 		<string>NewCarbEntry</string>
+ 		<string>NewCarbEntryIntent</string>
+ 		<string>ViewLoopStatus</string>
+diff --git a/Loop/Managers/DeeplinkManager.swift b/Loop/Managers/DeeplinkManager.swift
+index 86b17f62..4da92a83 100644
+--- a/Loop/Managers/DeeplinkManager.swift
++++ b/Loop/Managers/DeeplinkManager.swift
+@@ -7,6 +7,8 @@
+ //
+ 
+ import UIKit
++import HealthKit
++import LoopKit
+ 
+ enum Deeplink: String, CaseIterable {
+     case carbEntry = "carb-entry"
+@@ -26,13 +28,28 @@ enum Deeplink: String, CaseIterable {
+ class DeeplinkManager {
+     
+     private weak var rootViewController: UIViewController?
++    private weak var loopManager: LoopDataManager?
+     
+     init(rootViewController: UIViewController?) {
+         self.rootViewController = rootViewController
+     }
+     
++    func setLoopManager(_ loopManager: LoopDataManager?) {
++        self.loopManager = loopManager
++    }
++
+     func handle(_ url: URL) -> Bool {
+-        guard let rootViewController = rootViewController as? RootNavigationController, let deeplink = Deeplink(url: url) else {
++        guard let rootViewController = rootViewController as? RootNavigationController else {
++            return false
++        }
++
++        // Check if this is a carb entry URL with parameters
++        if url.host == "carbs" {
++            return handleCarbURL(url)
++        }
++
++        // Handle standard deep links
++        guard let deeplink = Deeplink(url: url) else {
+             return false
+         }
+         
+@@ -48,4 +65,49 @@ class DeeplinkManager {
+         rootViewController.navigate(to: deeplink)
+         return true
+     }
++
++    private func handleCarbURL(_ url: URL) -> Bool {
++        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
++              let carbAmountString = components.queryItems?.first(where: { $0.name == "amount" })?.value,
++              let carbAmount = Double(carbAmountString),
++              carbAmount > 0 else {
++            return false
++        }
++
++        let absorptionTime = components.queryItems?.first(where: { $0.name == "absorption" })?.value
++            .flatMap { Double($0) } ?? 3.0
++        let foodType = components.queryItems?.first(where: { $0.name == "food" })?.value
++
++        // Create carb entry
++        let now = Date()
++        let absorptionTimeInterval = TimeInterval(absorptionTime * 60 * 60) // Convert to seconds
++
++        let carbEntry = NewCarbEntry(
++            quantity: HKQuantity(unit: .gram(), doubleValue: carbAmount),
++            startDate: now,
++            foodType: foodType?.isEmpty == false ? foodType : nil,
++            absorptionTime: absorptionTimeInterval
++        )
++
++        // Add carb entry if we have access to the loop manager
++        if let loopManager = self.loopManager {
++            loopManager.addCarbEntry(carbEntry) { result in
++                // Handle callback if provided
++                if let callbackScheme = components.queryItems?.first(where: { $0.name == "callback" })?.value {
++                    let resultString = result.isSuccess ? "success" : "failure"
++                    let callbackURL = URL(string: "\(callbackScheme)://carbs?result=\(resultString)&amount=\(carbAmount)")!
++                    DispatchQueue.main.async {
++                        UIApplication.shared.open(callbackURL)
++                    }
++                }
++            }
++        } else {
++            // Fall back to navigating to carb entry screen
++            if let rootViewController = rootViewController as? RootNavigationController {
++                rootViewController.navigate(to: .carbEntry)
++            }
++        }
++
++        return true
++    }
+ }
+diff --git a/Loop/Managers/LoopAppManager.swift b/Loop/Managers/LoopAppManager.swift
+index b8e23d0b..89356b2a 100644
+--- a/Loop/Managers/LoopAppManager.swift
++++ b/Loop/Managers/LoopAppManager.swift
+@@ -234,6 +234,7 @@ class LoopAppManager: NSObject {
+                                               userDefaults: UserDefaults.appGroup!)
+ 
+         deeplinkManager = DeeplinkManager(rootViewController: rootViewController)
++        deeplinkManager.setLoopManager(deviceDataManager.loopManager)
+ 
+         for support in supportManager.availableSupports {
+             if let analyticsService = support as? AnalyticsService {
+@@ -353,6 +354,12 @@ class LoopAppManager: NSObject {
+         return true
+     }
+     
++    // MARK: - Data Access
++    
++    var loopDataManager: LoopDataManager? {
++        return deviceDataManager?.loopManager
++    }
++    
+     // MARK: - Deeplinking
+     
+     func handle(_ url: URL) -> Bool {

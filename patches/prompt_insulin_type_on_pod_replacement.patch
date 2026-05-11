@@ -1,0 +1,24 @@
+diff --git a/OmniBLE/OmniBLE/PumpManagerUI/ViewControllers/DashUICoordinator.swift b/OmniBLE/OmniBLE/PumpManagerUI/ViewControllers/DashUICoordinator.swift
+index 3fca469..98e2ff8 100644
+--- a/OmniBLE/OmniBLE/PumpManagerUI/ViewControllers/DashUICoordinator.swift
++++ b/OmniBLE/OmniBLE/PumpManagerUI/ViewControllers/DashUICoordinator.swift
+@@ -144,7 +144,7 @@ class DashUICoordinator: UINavigationController, PumpManagerOnboarding, Completi
+                 self?.setupCanceled()
+             }
+             
+-            let insulinSelectionView = InsulinTypeConfirmation(initialValue: .novolog, supportedInsulinTypes: allowedInsulinTypes, didConfirm: didConfirm, didCancel: didCancel)
++            let insulinSelectionView = InsulinTypeConfirmation(initialValue: pumpManager.insulinType ?? .novolog, supportedInsulinTypes: allowedInsulinTypes, didConfirm: didConfirm, didCancel: didCancel)
+             let hostedView = hostingController(rootView: insulinSelectionView)
+             hostedView.navigationItem.title = LocalizedString("Insulin Type", comment: "Title for insulin type selection screen")
+             return hostedView
+@@ -359,7 +359,9 @@ class DashUICoordinator: UINavigationController, PumpManagerOnboarding, Completi
+             if !pumpManager.initialConfigurationCompleted {
+                 return .firstRunScreen
+             }
+-            return .pairAndPrime // pair and prime a new pod
++            return .insulinTypeSelection // first-pod setup: confirm insulin type, then pair
++        } else if pumpManager.podCommState == .noPod {
++            return .insulinTypeSelection // re-confirm insulin type on each pod replacement
+         } else {
+             return .settings
+         }
